@@ -121,43 +121,54 @@ The Dockerfile installs these via `apt-get`:
 
 - **Content-Type**: `multipart/form-data`
 - **Field name**: `file` (STEP file)
-- **Response**: JSON with bounding box, mass properties, features (holes, pockets), and meta.
+- **Response**: JSON with `metrics` (each metric has the required metadata fields), `features` (holes/pockets), and `meta`.
 
-Example response structure:
+Example response structure (values shortened):
 
 ```json
 {
-  "boundingBox": {
-    "min": [0, 0, 0],
-    "max": [120, 80, 30],
-    "dimensions": [120, 80, 30]
-  },
-  "massProperties": {
-    "volume_mm3": 245000.5,
-    "surfaceArea_mm2": 18200.2
-  },
+  "metrics": [
+    {
+      "key": "bounding_box",
+      "display_name": "Bounding Box Dimensions",
+      "description": "Length × Width × Height and min/max coordinates",
+      "unit": "in",
+      "category": "Geometry",
+      "occt_extraction": "Bnd_Box via BRepBndLib::Add()",
+      "feeds": ["stock sizing", "fixturing", "stock volume estimation"],
+      "value": {
+        "min": [0.0, 0.0, 0.0],
+        "max": [4.72, 3.15, 1.18],
+        "dimensions": [4.72, 3.15, 1.18]
+      }
+    }
+  ],
   "features": {
     "holes": [
       {
         "id": "hole_1",
         "type": "through",
-        "diameter_mm": 10.0,
-        "depth_mm": 30.0,
+        "diameter_in": 0.5,
+        "depth_in": 1.2,
         "axis": [0, 0, 1],
+        "centroid_in": [1.1, 0.7, 0.3],
         "faces": ["face_12", "face_18"]
       }
     ],
     "pockets": [
       {
         "id": "pocket_1",
-        "depth_mm": 12.5,
-        "cornerRadius_mm": 2.0,
-        "faces": ["face_21", "face_22", "face_23"]
+        "depth_in": 0.4,
+        "cornerRadius_in": 0.08,
+        "volume_in3": 0.15,
+        "openingArea_in2": 0.36,
+        "bounds_in": [1.2, 0.8, 0.4],
+        "faces": ["face_21"]
       }
     ]
   },
   "meta": {
-    "units": "mm",
+    "units": "inch",
     "kernel": "OpenCascade",
     "source": "step"
   }
@@ -180,6 +191,9 @@ Example response structure:
 - **GeomAbs_Cylinder** – cylindrical faces are used to detect holes (axis, radius, extent).
 - **GeomAbs_Plane** – planar faces are used to detect pocket floors (depth from face extent).
 - **BRepAdaptor_Curve** – on pocket floor faces, edges are checked for **GeomAbs_Circle** to report corner radius (fillet).
+- **TopExp::MapShapes** – face/edge/vertex counts for complexity metrics.
+- **BRepLProp_SLProps** – curvature statistics sampled at mid-UV of each face.
+- **Plane distance** – thin-wall thickness from parallel planar faces.
 - Tessellation is only used where OCCT uses it internally (e.g. bounding box with `useTriangulation=true`); feature detection is based on exact BRep (cylinders, planes, circles).
 
 Tolerances (angle, length, radius) are set for typical manufacturing geometry (e.g. 1e-6). Face and feature IDs are stable: `face_1`, `face_2`, … by exploration order; `hole_1`, `pocket_1`, … by detection order.
@@ -212,6 +226,6 @@ Tolerances (angle, length, radius) are set for typical manufacturing geometry (e
 - **Stateless**: Each request is independent; no server-side session. Easy to scale and run behind a load balancer.
 - **Docker on Render**: Single container, no UI, listens on `PORT`. Render runs the container and routes traffic to it.
 - **Stable IDs**: `face_*` and `hole_*` / `pocket_*` IDs are deterministic for the same STEP file, so a WeWeb UI can map clicks or selections to the same features across reloads or different views.
-- **Units and meta**: All lengths in mm; `meta.kernel` and `meta.source` tell the client what engine and format were used.
+- **Units and meta**: All lengths in inches; `meta.kernel` and `meta.source` tell the client what engine and format were used.
 
 This service is intended as the backend for a web-based STEP viewer and feature-interaction system: the UI can display the same IDs and show properties (e.g. hole diameter, pocket depth) from this JSON.
